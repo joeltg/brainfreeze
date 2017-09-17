@@ -1,7 +1,8 @@
+import os
 from tfhe import *
 
 GATE_PARAMS = create_gate_params()
-BUS_WIDTH = 8
+BUS_WIDTH = 4
 
 secret = create_secret_keyset(GATE_PARAMS)
 cloud = get_cloud_keyset(secret)
@@ -304,3 +305,23 @@ def create_constant_signed_bus(value):
 ZERO_BUS = create_constant_signed_bus(0)
 POSITIVE_ONE_BUS = create_constant_signed_bus(1)
 NEGATIVE_ONE_BUS = create_constant_signed_bus(-1)
+
+
+dir_path = os.path.dirname(os.path.realpath(__file__))
+
+
+def load_from_path(name):
+    if os.path.exists(dir_path + "/" + name):
+        bus = create_bus()
+        for i in range(BUS_WIDTH):
+            file = dir_path + "/" + name + "/" + str(i)
+            tfhe_io.import_ciphertext(file.encode(), bus[i].result, GATE_PARAMS)
+        return bus
+
+
+def write_to_path(name, bus):
+    if not os.path.exists(dir_path + "/" + name):
+        os.makedirs(dir_path + "/" + name)
+    for i in range(BUS_WIDTH):
+        file = dir_path + "/" + name + "/" + str(i)
+        tfhe_io.export_ciphertext(file.encode(), bus[i].result, GATE_PARAMS)

@@ -56,21 +56,22 @@ def flush():
 #     return decrypt_number(counter.result, secret)
 
 
-# b = create_bus()
-#
-# adder = RippleAdder(a, b)
-# bus, carry = adder.outputs
-#
-#
-# def add(p, q):
-#     encrypt_number(p, a, secret)
-#     encrypt_number(q, b, secret)
-#     [i.evaluate(cloud) for i in a]
-#     [i.evaluate(cloud) for i in b]
-#     ONE.evaluate(cloud)
-#     ZERO.evaluate(cloud)
-#     print([i.get(secret) for i in a])
-#     print([i.get(secret) for i in b])
-#     print([i.get(secret) for i in bus])
-#     print("----")
-#     return decrypt_number(bus, secret)
+add_a = create_bus()
+add_b = create_bus()
+
+adder = RippleAdder(add_a, add_b)
+add_bus, carry = adder.outputs
+
+
+def add(p, q):
+    encrypt_number(p, add_a, secret)
+    encrypt_number(q, add_b, secret)
+    [i.evaluate(cloud) for i in add_a]
+    [i.evaluate(cloud) for i in add_b]
+    ONE.evaluate(cloud)
+    ZERO.evaluate(cloud)
+    print([i.get(secret) for i in add_a])
+    print([i.get(secret) for i in add_b])
+    print([i.get(secret) for i in add_bus])
+    print("----")
+    return decrypt_number(add_bus, secret)
