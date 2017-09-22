@@ -2,7 +2,9 @@
 #include <tfhe/tfhe.h>
 #include <tfhe/tfhe_io.h>
 
+
 /** Gate parameters */
+
 void export_gate_params(const char* filename, const TFheGateBootstrappingParameterSet* params) {
     FILE* file = fopen(filename, "w");
     export_tfheGateBootstrappingParameterSet_toFile(file, params);
@@ -16,7 +18,9 @@ TFheGateBootstrappingParameterSet* import_gate_params(const char* filename) {
     return params;
 }
 
+
 /** Secret keysets */
+
 void export_secret_keyset(const char* filename, const TFheGateBootstrappingSecretKeySet* params) {
     FILE* file = fopen(filename, "w");
     export_tfheGateBootstrappingSecretKeySet_toFile(file, params);
@@ -30,7 +34,9 @@ TFheGateBootstrappingSecretKeySet* import_secret_keyset(const char* filename) {
     return keyset;
 }
 
+
 /** Cloud keysets */
+
 void export_cloud_keyset(const char* filename, const TFheGateBootstrappingCloudKeySet* params) {
     FILE* file = fopen(filename, "w");
     export_tfheGateBootstrappingCloudKeySet_toFile(file, params);
@@ -44,7 +50,9 @@ TFheGateBootstrappingCloudKeySet* import_cloud_keyset(const char* filename) {
     return keyset;
 }
 
+
 /** Ciphertexts */
+
 void export_ciphertext (const char* filename, const LweSample* sample, const TFheGateBootstrappingParameterSet* params) {
     FILE* file = fopen(filename, "w");
     export_gate_bootstrapping_ciphertext_toFile(file, sample, params);
