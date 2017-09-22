@@ -1,310 +1,444 @@
-import os
+from abc import ABC, abstractmethod
 from tfhe import *
 
 GATE_PARAMS = create_gate_params()
-BUS_WIDTH = 4
 
-secret = create_secret_keyset(GATE_PARAMS)
-cloud = get_cloud_keyset(secret)
+RAM_WIDTH = 8
 
 
-class Gate:
-    def __init__(self, apply, inputs=None, init=True):
-        self.inputs = [] if inputs is None else inputs
-        self.progress = [False] * len(self.inputs)
+def encode(value):
+    modulo = value % 2 ** (ARCH - 1)
+    binary = bin(modulo)[2:].zfill(ARCH - 1)
+    string = "1" + binary if value < 0 else "0" + binary
+    return [bool(int(char)) for char in string]
 
-        self.children = []
+
+def decode(bits):
+    value = int("".join(map(str, map(int, bits[1:]))), 2)
+    return value - 2 ** (ARCH - 1) if bits[0] else value
+
+
+def create_value():
+    return create_ciphertext(GATE_PARAMS)
+
+
+def create_bus():
+    bus = []
+    for i in range(ARCH):
+        bus.append(create_value())
+    return bus
+
+
+def create_ram():
+    ram = []
+    for i in range(RAM_WIDTH):
+        ram.append(create_bus())
+    return ram
+
+
+class Circuit(ABC):
+    @abstractmethod
+    def eval(self, cloud_key):
+        pass
+
+
+class Gate(Circuit):
+    def __init__(self, apply, inputs):
+        Circuit.__init__(self)
+        self.inputs = inputs
         self.apply = apply
-        self.result = create_ciphertext(GATE_PARAMS)
-        self.values = None
+        self.value = create_value()
 
-        if init:
-            self.initialize()
-
-    def initialize(self):
-        self.values = tuple(map(lambda g: g.result, self.inputs))
-        for index, gate in enumerate(self.inputs):
-            gate.attach(self, index)
-
-    def evaluate(self, cloud):
-        # print("eval", self)
-        self.apply(self.result, *self.values, cloud)
-        for i in range(len(self.progress)):
-            self.progress[i] = False
-        for gate, index in self.children:
-            gate.notify(index, cloud)
-
-    def get(self, secret):
-        return decrypt(self.result, secret)
-
-    def set(self, value, secret):
-        encrypt(self.result, value, secret)
-
-    def attach(self, gate, index):
-        self.children.append((gate, index))
-
-    def notify(self, index, cloud):
-        self.progress[index] = True
-        if all(self.progress):
-            self.evaluate(cloud)
+    def eval(self, cloud_key):
+        inputs = self.inputs
+        self.apply(self.value, *inputs, cloud_key)
 
 
-def void(*args):
-    pass
-
-
-class Input(Gate):
-    def __init__(self):
-        Gate.__init__(self, void)
+class Not(Gate):
+    def __init__(self, *inputs):
+        Gate.__init__(self, tfhe.bootsNOT, inputs)
 
 
 class Constant(Gate):
     def __init__(self, value):
-        Gate.__init__(self, lambda result, keyset: tfhe.bootsCONSTANT(result, value, keyset))
+        Gate.__init__(self, tfhe.bootsCONSTANT, (int(value),))
 
 
-ZERO = Constant(0)
-ONE = Constant(1)
+class NAND(Gate):
+    def __init__(self, *inputs):
+        Gate.__init__(self, tfhe.bootsNAND, inputs)
 
 
-class Not(Gate):
-    def __init__(self, a):
-        Gate.__init__(self, tfhe.bootsNOT, [a])
+class OR(Gate):
+    def __init__(self, *inputs):
+        Gate.__init__(self, tfhe.bootsOR, inputs)
 
 
-class And(Gate):
-    def __init__(self, a, b, init=True):
-        Gate.__init__(self, tfhe.bootsAND, [a, b], init)
+class AND(Gate):
+    def __init__(self, *inputs):
+        Gate.__init__(self, tfhe.bootsAND, inputs)
 
 
-class Or(Gate):
+class XOR(Gate):
+    def __init__(self, *inputs):
+        Gate.__init__(self, tfhe.bootsXOR, inputs)
+
+
+class XNOR(Gate):
+    def __init__(self, *inputs):
+        Gate.__init__(self, tfhe.bootsXNOR, inputs)
+
+
+class NOR(Gate):
+    def __init__(self, *inputs):
+        Gate.__init__(self, tfhe.bootsNOR, inputs)
+
+
+class ANDNY(Gate):
+    def __init__(self, *inputs):
+        Gate.__init__(self, tfhe.bootsANDNY, inputs)
+
+
+class ANDYN(Gate):
+    def __init__(self, *inputs):
+        Gate.__init__(self, tfhe.bootsANDYN, inputs)
+
+
+class ORNY(Gate):
+    def __init__(self, *inputs):
+        Gate.__init__(self, tfhe.bootsORNY, inputs)
+
+
+class ORYN(Gate):
+    def __init__(self, *inputs):
+        Gate.__init__(self, tfhe.bootsORYN, inputs)
+
+
+class MUX(Gate):
+    def __init__(self, *inputs):
+        Gate.__init__(self, tfhe.bootsMUX, inputs)
+
+
+# Constants
+
+TRUE = Constant(True)
+FALSE = Constant(False)
+
+
+def create_constant(value):
+    bits = encode(value)
+    return [TRUE.value if bit else FALSE.value for bit in bits]
+
+
+ZERO = create_constant(0)
+POSITIVE_ONE = create_constant(1)
+NEGATIVE_ONE = create_constant(-1)
+
+
+# Circuits
+
+
+class BitAdder(Circuit):
+    def __init__(self, a, b, c):
+        Circuit.__init__(self)
+        self.x1 = XOR(a, b)
+        self.a1 = AND(a, b)
+        self.x2 = XOR(self.x1.value, c)
+        self.a2 = AND(self.x1.value, c)
+        self.o1 = OR(self.a1.value, self.a2.value)
+
+        self.carry = self.o1.value
+        self.value = self.x2.value
+
+    def eval(self, cloud_key):
+        self.x1.eval(cloud_key)
+        self.a1.eval(cloud_key)
+        self.x2.eval(cloud_key)
+        self.a2.eval(cloud_key)
+        self.o1.eval(cloud_key)
+
+
+class BusAdder(Circuit):
     def __init__(self, a, b):
-        Gate.__init__(self, tfhe.bootsOR, [a, b])
-
-
-class Xor(Gate):
-    def __init__(self, a, b, init=True):
-        Gate.__init__(self, tfhe.bootsXOR, [a, b], init)
-
-
-class Xnor(Gate):
-    def __init__(self, a, b):
-        Gate.__init__(self, tfhe.bootsXNOR, [a, b])
-
-
-class Mux(Gate):
-    def __init__(self, a, b, c, init=True):
-        Gate.__init__(self, tfhe.bootsMUX, [a, b, c], init)
-
-
-class HalfAdder:
-    def __init__(self, a, b, init=True):
-        self.a = a
-        self.b = b
-
-        self.sum = Xor(self.a, self.b, init)
-        self.carry = And(self.a, self.b, init)
-        self.outputs = (self.sum, self.carry)
-
-    def initialize(self):
-        self.sum.initialize()
-        self.carry.initialize()
-
-
-class FullAdder:
-    def __init__(self, a, b, c, init=True):
-        self.half_a = HalfAdder(a, b, init)
-        sum_a, carry_a = self.half_a.outputs
-        self.half_b = HalfAdder(sum_a, c, init)
-        sum_b, carry_b = self.half_b.outputs
-        self.outputs = (sum_b, Or(carry_a, carry_b))
-
-    def initialize(self):
-        self.half_a.initialize()
-        self.half_b.initialize()
-
-
-class RippleAdder:
-    def __init__(self, bus_a, bus_b):
-        bus_c = []
-        carry = ZERO
-        for index in reversed(range(BUS_WIDTH)):
-            a = bus_a[index]
-            b = bus_b[index]
-            adder = FullAdder(a, b, carry)
-            v, c = adder.outputs
-            carry = c
-            bus_c.append(v)
-        self.result = list(reversed(bus_c))
-        self.outputs = (self.result, carry)
-
-
-class Switch:
-    def __init__(self, a, b_bus, c_bus):
-        self.result = [Mux(a, b_bus[i], c_bus[i]) for i in range(BUS_WIDTH)]
-
-
-class BitRegister:
-    def __init__(self, live, data):
-        self.result = Mux(live, data, None, False)
-        self.result.inputs[2] = self.result
-        self.result.progress[2] = True
-        self.result.initialize()
-
-
-class BitCounter:
-    def __init__(self, delta, carry):
-        self.delta = delta
+        Circuit.__init__(self)
+        self.value = [None] * ARCH
+        self.adder = [None] * ARCH
+        carry = FALSE.value
+        for i in reversed(range(ARCH)):
+            adder = BitAdder(a[i], b[i], carry)
+            carry = adder.carry
+            self.adder[i] = adder
+            self.value[i] = adder.value
         self.carry = carry
 
-        self.half_a = HalfAdder(None, delta, False)
-        sum_a, carry_a = self.half_a.outputs
-        self.half_b = HalfAdder(sum_a, carry, False)
-        sum_b, carry_b = self.half_b.outputs
-        self.outputs = (sum_b, Or(carry_a, carry_b))
-
-        self.count = sum_b
-        self.half_a.sum.progress[0] = True
-        self.half_a.carry.progress[0] = True
-        self.half_a.sum.inputs[0] = sum_b
-        self.half_a.carry.inputs[0] = sum_b
-
-        self.half_a.initialize()
-        self.half_b.initialize()
+    def eval(self, cloud_key):
+        for adder in reversed(self.adder):
+            adder.eval(cloud_key)
 
 
-class RippleCounter:
-    def __init__(self, delta_bus):
-        self.delta_bus = delta_bus
-        bus = []
-        self.carry = ZERO
-        for index in reversed(range(BUS_WIDTH)):
-            counter = BitCounter(self.delta_bus[index], self.carry)
-            bit, c = counter.outputs
-            bus.append(bit)
-            self.carry = c
-        self.result = list(reversed(bus))
+class Equal(Circuit):
+    def __init__(self, a, b):
+        Circuit.__init__(self)
+        self.gates = []
+        value = TRUE.value
+        for i in range(ARCH):
+            equal = XNOR(a[i], b[i])
+            gate = AND(value, equal.value)
+            value = gate.value
+            self.gates.append(equal)
+            self.gates.append(gate)
+        self.value = value
 
-    def read(self):
-        return decrypt_number(self.result, secret)
-
-    def flush(self):
-        for bit in self.delta_bus:
-            bit.evaluate(cloud)
+    def eval(self, cloud_key):
+        for gate in self.gates:
+            gate.eval(cloud_key)
 
 
-class Register:
-    def __init__(self, live, data_bus):
-        self.result = [BitRegister(live, data) for data in data_bus]
-        self.outputs = self.result,
+class Zero(Circuit):
+    def __init__(self, a):
+        Circuit.__init__(self)
+        self.gates = []
+        value = TRUE.value
+        for bit in a:
+            gate = ANDYN(value, bit)
+            value = gate.value
+            self.gates.append(gate)
+        self.value = value
+
+    def eval(self, cloud_key):
+        for gate in self.gates:
+            gate.eval(cloud_key)
 
 
-class RAM:
-    def __init__(self, index_bus, delta_bus):
-        self.index_bus = index_bus
-        self.delta_bus = delta_bus
-        self.range = [[Constant(int(j)) for j in bin(i)[2:].zfill(BUS_WIDTH)] for i in range(2 ** BUS_WIDTH)]
+class Switch(Circuit):
+    def __init__(self, condition, a, b):
+        Circuit.__init__(self)
+        self.condition = condition
+        self.muxes = [MUX(condition, a[i], b[i]) for i in range(ARCH)]
+        self.value = [mux.value for mux in self.muxes]
 
-        # negative = Switch(decrement, NEGATIVE_ONE_BUS, ZERO_BUS).result
-        # delta = Switch(increment, POSITIVE_ONE_BUS, negative).result
-
-        self.one = Constant(1)
-        self.zero_bus = [Constant(0) for i in range(BUS_WIDTH)]
-        self.counters = []
-        for i in range(2 ** BUS_WIDTH):
-            # Assemble a circuit to test for equality to i
-            equal = self.one
-            for j, bit in enumerate(self.range[i]):
-                equal = And(equal, Xnor(bit, self.index_bus[j]))
-            delta_switch = Switch(equal, self.delta_bus, self.zero_bus)
-            counter = RippleCounter(delta_switch.result)
-            self.counters.append(counter)
-
-    def read(self):
-        return [decrypt_number(counter.result, secret) for counter in self.counters]
-
-    def flush(self):
-        # [p.evaluate(cloud) for p in self.zero]
-
-        [[p.evaluate(cloud) for p in i] for i in self.range]
-
-        self.one.evaluate(cloud)
-        [p.evaluate(cloud) for p in self.zero_bus]
-        [p.evaluate(cloud) for p in self.delta_bus]
-        [p.evaluate(cloud) for p in self.index_bus]
-
-        ZERO.evaluate(cloud)
-        ONE.evaluate(cloud)
+    def eval(self, cloud_key):
+        for mux in self.muxes:
+            mux.eval(cloud_key)
 
 
-class ROM:
-    def __init__(self, index_bus, data):
-        self.index_bus = index_bus
+class Index(Circuit):
+    def __init__(self, index, array):
+        self.index = index
+        self.array = array
+        self.elements = []
+        value = ZERO
+        for i, element in enumerate(array):
+            equal = Equal(create_constant(i), self.index)
+            switch = Switch(equal.value, element, value)
+            value = switch.value
+            self.elements.append(equal)
+            self.elements.append(switch)
+        self.value = value
+
+    def eval(self, cloud_key):
+        for element in self.elements:
+            element.eval(cloud_key)
+
+
+class Direction(Circuit):
+    def __init__(self, value, direction, nest, is_open, is_close):
+        Circuit.__init__(self)
+
+        self.nest_zero = Zero(nest)
+        self.value_zero = Zero(value)
+
+        self.right = ORYN(self.value_zero.value, is_close)
+        self.left = AND(is_open, self.nest_zero.value)
+        self.switch = MUX(direction, self.right.value, self.left.value)
+        self.value = self.switch.value
+
+    def eval(self, cloud_key):
+        self.nest_zero.eval(cloud_key)
+        self.value_zero.eval(cloud_key)
+        self.right.eval(cloud_key)
+        self.left.eval(cloud_key)
+        self.switch.eval(cloud_key)
+
+
+class Nest(Circuit):
+    def __init__(self, direction, nest, loop, delta):
+        Circuit.__init__(self)
+        self.delta = Switch(loop, delta, ZERO)
+        self.left = BusAdder(nest, self.delta.value)
+        self.switch = Switch(direction, ZERO, self.left.value)
+        self.value = self.switch.value
+
+    def eval(self, cloud_key):
+        self.delta.eval(cloud_key)
+        self.left.eval(cloud_key)
+        self.switch.eval(cloud_key)
+
+
+# CPU is a circuit that maps
+# (instruction, value, direction, nest)
+# to
+# (delta_instruction, delta_value, direction, nest)
+# The Computer actually computes the deltas before feeding back
+
+
+class CPU(Circuit):
+    def __init__(self, instruction, value, direction, nest):
+        Circuit.__init__(self)
+        self.loop = AND(instruction[-2], instruction[-3])
+        self.open = ANDYN(self.loop.value, instruction[-1])
+        self.close = AND(self.loop.value, instruction[-1])
+        self.delta = Switch(instruction[-1], NEGATIVE_ONE, POSITIVE_ONE)
+
+        self.move = NOR(instruction[-2], instruction[-3])
+        self.move_alive = AND(direction, self.move.value)
+        self.move_delta = Switch(self.move_alive.value, self.delta.value, ZERO)
+
+        self.edit = ANDYN(instruction[-2], instruction[-3])
+        self.edit_alive = AND(direction, self.edit.value)
+        self.edit_delta = Switch(self.edit_alive.value, self.delta.value, ZERO)
+
+        self.direction = Direction(value, direction, nest, self.open.value, self.close.value)
+        self.nest = Nest(direction, nest, self.loop.value, self.delta.value)
+
+    def eval(self, cloud_key):
+        self.loop.eval(cloud_key)
+        self.open.eval(cloud_key)
+        self.close.eval(cloud_key)
+        self.delta.eval(cloud_key)
+
+        self.move.eval(cloud_key)
+        self.move_alive.eval(cloud_key)
+        self.move_delta.eval(cloud_key)
+
+        self.edit.eval(cloud_key)
+        self.edit_alive.eval(cloud_key)
+        self.edit_delta.eval(cloud_key)
+
+        self.direction.eval(cloud_key)
+        self.nest.eval(cloud_key)
+
+
+class RAM(Circuit):
+    def __init__(self, data, data_pointer, data_delta):
         self.data = data
-        self.range = [[Constant(int(j)) for j in bin(i)[2:].zfill(BUS_WIDTH)] for i in range(2 ** BUS_WIDTH)]
-        self.one = Constant(1)
-        self.minus_one_bus = [Constant(int(i)) for i in encode_bits(-1)]
-        self.one_bus = [Constant(int(i)) for i in encode_bits(1)]
-        self.zero_bus = [Constant(int(i)) for i in encode_bits(0)]
-        for i in range(2 ** BUS_WIDTH):
-            data_bus = data[i]
-            equal = self.one
-            for j, bit in enumerate(self.range[i]):
-                equal = And(equal, Xnor(bit, self.index_bus[j]))
-            operation = Switch(equal, data_bus, self.zero_bus).result
-            data_pointer_delta = Switch(operation[-1], self.minus_one_bus, self.one_bus).result
-            data_pointer_move = Switch(operation[-2], data_pointer_delta, self.zero_bus).result
+        self.pointer = data_pointer
+        self.delta = data_delta
+        self.elements = []
+        self.value = []
+        for i in range(RAM_WIDTH):
+            equal = Equal(self.pointer, create_constant(i))
+            switch = Switch(equal.value, self.delta, ZERO)
+            adder = BusAdder(self.data[i], switch.value)
+            self.elements.append(equal)
+            self.elements.append(switch)
+            self.elements.append(adder)
+            self.value.append(adder.value)
+
+    def eval(self, cloud_key):
+        for element in self.elements:
+            element.eval(cloud_key)
 
 
-def create_bus():
-    return [Input() for i in range(BUS_WIDTH)]
+class Computer(Circuit):
+    def __init__(self, instructions):
+        Circuit.__init__(self)
+        self.instructions = instructions
+        self.instruction_pointer = create_bus()
+        self.instruction_index = Index(self.instruction_pointer, self.instructions)
+        self.instruction = self.instruction_index.value
+        self.direction = create_value()
+        self.nest = create_bus()
+
+        self.data = create_ram()
+        self.data_pointer = create_bus()
+        self.data_index = Index(self.data_pointer, self.data)
+        self.value = self.data_index.value
+
+        self.cpu = CPU(self.instruction, self.value, self.direction, self.nest)
+
+        self.instruction_switch = Switch(self.cpu.direction.value, POSITIVE_ONE, NEGATIVE_ONE)
+        self.instruction_adder = BusAdder(self.instruction_switch.value, self.instruction_pointer)
+
+        self.data_adder = BusAdder(self.cpu.move_delta.value, self.data_pointer)
+
+        self.ram = RAM(self.data, self.data_pointer, self.cpu.edit_delta.value)
+
+    def eval(self, cloud_key):
+        self.instruction_index.eval(cloud_key)
+        self.data_index.eval(cloud_key)
+        self.cpu.eval(cloud_key)
+        self.instruction_switch.eval(cloud_key)
+        self.instruction_adder.eval(cloud_key)
+        self.data_adder.eval(cloud_key)
+        self.ram.eval(cloud_key)
+
+        copy_bus(self.instruction_pointer, self.instruction_adder.value, cloud_key)
+        copy_bus(self.data_pointer, self.data_adder.value, cloud_key)
+        copy_bit(self.direction, self.cpu.direction.value, cloud_key)
+        copy_bus(self.nest, self.cpu.nest.value, cloud_key)
+        for r, v in zip(self.data, self.ram.value):
+            copy_bus(r, v, cloud_key)
+
+    def init(self, cloud_key):
+        for bit in self.instruction_pointer:
+            tfhe.bootsCONSTANT(bit, 0, cloud_key)
+        for bit in self.nest:
+            tfhe.bootsCONSTANT(bit, 0, cloud_key)
+        for bus in self.data:
+            for bit in bus:
+                tfhe.bootsCONSTANT(bit, 0, cloud_key)
+        for bit in self.data_pointer:
+            tfhe.bootsCONSTANT(bit, 0, cloud_key)
+        tfhe.bootsCONSTANT(self.direction, 1, cloud_key)
 
 
-def encode_bits(value):
-    modulo = value % 2 ** (BUS_WIDTH - 1)
-    binary = bin(modulo)[2:].zfill(BUS_WIDTH - 1)
-    return "1" + binary if value < 0 else "0" + binary
+'''
+00000000 | 0x00 | move data pointer right
+00000001 | 0x01 | move data pointer left
+00000010 | 0x02 | increment data value
+00000011 | 0x03 | decrement data value
+00000100 | 0x04 | output data value
+00000101 | 0x05 | input data value
+00000110 | 0x06 | mark start of loop
+00000111 | 0x07 | loop to start mark
+'''
+
+operations = {
+    ">": encode(0),
+    "<": encode(1),
+    "+": encode(2),
+    "-": encode(3),
+    ".": encode(4),
+    ",": encode(5),
+    "[": encode(6),
+    "]": encode(7)
+}
 
 
-def decode_bits(bits):
-    value = int(bits[1:], 2)
-    return value - 2 ** (BUS_WIDTH - 1) if bits[0] == "1" else value
+def create_rom(code, secret_key):
+    rom = []
+    for char in code:
+        bits = operations[char]
+        bus = create_bus()
+        for value, sample in zip(bits, bus):
+            encrypt(sample, value, secret_key)
+        rom.append(bus)
+    return rom
 
 
-def encrypt_unsigned_number(value, bus, secret):
-    bits = bin(value)[2:].zfill(BUS_WIDTH)
-    for bit, gate in zip(bits, bus):
-        gate.set(int(bit), secret)
+def copy_bit(result, value, cloud_key):
+    tfhe.bootsCOPY(result, value, cloud_key)
 
 
-def decrypt_unsigned_number(bus, secret):
-    bits = [str(gate.get(secret)) for gate in bus]
-    return int("".join(bits), 2)
+def copy_bus(result, value, cloud_key):
+    for r, v in zip(result, value):
+        copy_bit(r, v, cloud_key)
 
 
-def encrypt_number(value, bus, secret):
-    bits = encode_bits(value)
-    for bit, gate in zip(bits, bus):
-        gate.set(int(bit), secret)
-
-
-def decrypt_number(bus, secret):
-    bits = [str(gate.get(secret)) for gate in bus]
-    return decode_bits("".join(bits))
-
-
-def create_constant_unsigned_bus(value):
-    bits = bin(value)[2:].zfill(BUS_WIDTH)
-    return [ZERO if bit == "0" else ONE for bit in bits]
-
-
-def create_constant_signed_bus(value):
-    bits = encode_bits(value)
-    return [ZERO if bit == "0" else ONE for bit in bits]
-
-ZERO_BUS = create_constant_signed_bus(0)
-POSITIVE_ONE_BUS = create_constant_signed_bus(1)
-NEGATIVE_ONE_BUS = create_constant_signed_bus(-1)
+def get(bus, secret_key):
+    bits = [decrypt(sample, secret_key) for sample in bus]
+    return decode(bits)
 
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -313,15 +447,15 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 def load_from_path(name):
     if os.path.exists(dir_path + "/" + name):
         bus = create_bus()
-        for i in range(BUS_WIDTH):
+        for i in range(ARCH):
             file = dir_path + "/" + name + "/" + str(i)
-            tfhe_io.import_ciphertext(file.encode(), bus[i].result, GATE_PARAMS)
+            tfhe_io.import_ciphertext(file.encode(), bus[i], GATE_PARAMS)
         return bus
 
 
 def write_to_path(name, bus):
     if not os.path.exists(dir_path + "/" + name):
         os.makedirs(dir_path + "/" + name)
-    for i in range(BUS_WIDTH):
+    for i in range(ARCH):
         file = dir_path + "/" + name + "/" + str(i)
-        tfhe_io.export_ciphertext(file.encode(), bus[i].result, GATE_PARAMS)
+        tfhe_io.export_ciphertext(file.encode(), bus[i], GATE_PARAMS)
