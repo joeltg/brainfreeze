@@ -18,3 +18,15 @@ The bytes of RAM affect speed because the data pointer is encrypted along with e
 Since we never actually know where the data pointer is, or which instruction we're executing, Brainfreeze has to execute every possible operation on every possible memory address on every clock cycle.
 This is a general problem with FHE: every branch in your control flow has to be explored and recombined at the end.
 There's no way around it without leaking information about your inputs.
+
+### Brainfreeze
+
+Brainfreeze is a stack of three abstraction layers:
+
+1. A Python wrapper for the TFHE library. This is `tfhe.py` and `tfhe_utils.py`. They're written using `ctypes` and is probably the most useful and resusable part of this whole thing.
+2. A collection of homomorphic circuits (adders, muxes, RAM) built from TFHE gates. They inherit from the `Circuit` class in `circuits.py`.
+3. A minimal Brainfuck computer similar in design to [this one](https://github.com/briandef/bf16). `Computer` is a circuit from `circuits.py` but the interface in `brainfreeze.py` exposes `compile`, `evaluate`, and `decompile` functions to interact with it concisely.
+
+### API
+
+Help I'm Trapped In A Homomorphic Reality
