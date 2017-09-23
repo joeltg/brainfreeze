@@ -19,8 +19,6 @@ It's built on the [TFHE](https://tfhe.github.io/tfhe/) library, and to the best 
 This is probably because FHE is excruciatingly slow: with TFHE, each boolean operation on two encrypted bits takes 10-20 milliseconds to evaluate. 
 With an 8-bit architecture and 16 bytes of RAM, Brainfreeze sputters along at around 0.1 hertz (1 cycle every 10 seconds) on a 2017 Macbook Pro. 😬
 
-### Surrender to the Tyranny of Exponential Loop Unrolling
-
 The bytes of RAM affect speed because the data pointer is encrypted along with every other register. 
 Since we never actually know where the data pointer is, or which instruction we're executing, Brainfreeze has to execute every possible operation on every possible memory address on every clock cycle, and pretend to update each one.
 This is a general problem with FHE: every branch in your control flow has to be explored and recombined at the end.
@@ -30,16 +28,15 @@ There's no way around it without leaking information about your inputs; we must 
 
 Brainfreeze is a stack of three abstraction layers:
 
-1. A Python wrapper for the TFHE library. This is `tfhe.py` and `tfhe_utils.py`. They're written using `ctypes` and is probably the most useful and resusable part of this whole thing.
+1. A Python wrapper for the TFHE library. This is `tfhe.py` and `tfhe_utils.py`. They're written using `ctypes` and is probably the most useful part of this whole rigmarole.
 2. A collection of homomorphic circuits (adders, muxes, RAM, CPU) built from TFHE gates. They inherit from the `Circuit` class in `circuits.py`.
 3. A minimal Brainfuck computer similar in design to [this one](https://github.com/briandef/bf16). The interface in `brainfreeze.py` exposes `compile`, `evaluate`, and `decompile` functions to interact with it concisely.
 
 ## API
 
-First:
-```shell
-```
-Clone this repo and compile the Python wrapper. [1]
+First, [install TFHE](https://tfhe.github.io/tfhe/installation.html).
+
+Then clone this repo and compile the Python wrapper. [1]
 ```shell
 git clone https://github.com/joeltg/brainfreeze
 cd brainfreeze
