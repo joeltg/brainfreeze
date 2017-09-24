@@ -53,6 +53,6 @@ secret_keyset, cloud_keyset = initialize(architecture=8)
 
 [1] "Isn't this what makfiles are supposed to replace?" Yes.
 
-[2] This `tfhe_io.c` wrapper is actually *just* for I/O. The TFHE functions to read and write ciphertexts and gate parameters to and from files takes `FILE*` objects, which I can't figure out how to use with `ctpyes`. So `tfhe_io.c` has wrapper functions that take file paths as string literals. If anyone has a real solution to this, please tell me.
+[2] This `tfhe_io.c` wrapper is actually *just* for I/O. The TFHE functions to read and write ciphertexts and gate parameters to and from files takes `FILE*` objects, which I can't figure out how to pass into a `ctypes` function in Python. So `tfhe_io.c` has wrapper functions that take file paths as string literals, which gets compiled and then dynamically loaded in `tfhe_utils.py`. If anyone has a real solution to this, please tell me.
 
 `<marquee><blink> ~ ~ ~ HeLp I'm TrApPeD iN a HoMoMoRpHiC rEaLiTy ~ ~ ~ </blink></marquee>`
