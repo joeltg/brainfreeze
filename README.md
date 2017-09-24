@@ -24,6 +24,8 @@ Since we never actually know where the data pointer points, or which instruction
 This is a general problem with FHE: every path through your control flow has to be explored and recombined at the end.
 There's no way around it without leaking information about your inputs; we must surrender to the Tyranny of Exponential Branch Unrolling.
 
+FHE efficiency has jumped several orders of magnitude in the last few years, which will hopefully continue. It's also [theoretically possible](https://eprint.iacr.org/2013/229) to sidestep exponential branch unrolling if you're willing to leak a little bit of information about your program's runtime. So FHC is comically useless for now, but there's no better time to start thinking about it.
+
 ### Brainfreeze
 
 Brainfreeze is a stack of three abstraction layers:
