@@ -36,7 +36,7 @@ Brainfreeze is a stack of three abstraction layers:
 
 1. [Install TFHE](https://tfhe.github.io/tfhe/installation.html).
 
-2. Clone this repo and edit `tfhe.py` and `makefile` to reference the right version of TFHE. [1] The defaults are all for the `libtfhe-spqlios-fma`, which is what you get when you compile TFHE with the `-DENABLE_SPQLIOS_FMA=on` flag.
+2. Clone this repo and edit `tfhe.py` and `makefile` to reference the right version of TFHE. [1] The defaults are for `libtfhe-spqlios-fma`, which is what you get when you compile TFHE with the `-DENABLE_SPQLIOS_FMA=on` flag. If you've already installed TFHE and don't remember what version it is, you can probably find it with `ls /usr/local/lib | grep libtfhe`.
 
 3. Compile the Python wrapper. [2]
 ```shell
