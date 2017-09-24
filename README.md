@@ -19,18 +19,18 @@ It's built on the [TFHE](https://tfhe.github.io/tfhe/) library, and to the best 
 This is probably because FHE is excruciatingly slow: with TFHE, each boolean operation on two encrypted bits takes 10-20 milliseconds to evaluate. 
 With an 8-bit architecture and 16 bytes of RAM, Brainfreeze sputters along at around 0.1 hertz (1 cycle every 10 seconds) on a 2017 Macbook Pro. 😬
 
-The bytes of RAM affect speed because the data pointer is encrypted along with every other register. 
-Since we never actually know where the data pointer is, or which instruction we're executing, Brainfreeze has to execute every possible operation on every possible memory address on every clock cycle, and pretend to update each one.
-This is a general problem with FHE: every branch in your control flow has to be explored and recombined at the end.
-There's no way around it without leaking information about your inputs; we must surrender to the Tyranny of Exponential Loop Unrolling.
+The size of RAM affects speed because the data pointer is encrypted (along with every other register). 
+Since we never actually know where the data pointer points, or which instruction we're executing, Brainfreeze has to execute every possible operation on every possible memory address on every clock cycle, and pretend to update each one.
+This is a general problem with FHE: every path through your control flow has to be explored and recombined at the end.
+There's no way around it without leaking information about your inputs; we must surrender to the Tyranny of Exponential Branch Unrolling.
 
 ### Brainfreeze
 
 Brainfreeze is a stack of three abstraction layers:
 
 1. A Python wrapper for the TFHE library. This is `tfhe.py` and `tfhe_utils.py`. They're written using `ctypes` and is probably the most useful part of this whole rigmarole.
-2. A collection of homomorphic circuits (adders, muxes, RAM, CPU) built from TFHE gates. They inherit from the `Circuit` class in `circuits.py`.
-3. A minimal Brainfuck computer similar in design to [this one](https://github.com/briandef/bf16). The interface in `brainfreeze.py` exposes `compile`, `evaluate`, and `decompile` functions to interact with it concisely.
+2. A collection of homomorphic circuits (adders, muxes, RAM, CPU) built from TFHE gates. They inherit from the `Circuit` class in `circuits.py`. The CPU design is inspired by [this one](https://github.com/briandef/bf16).
+3. A minimal Brainfuck computer. The interface in `brainfreeze.py` exposes `compile`, `evaluate`, and `decompile` functions to interact with it concisely.
 
 ## API
 
@@ -51,7 +51,7 @@ from brainfreeze import *
 secret_keyset, cloud_keyset = initialize(architecture=8)
 ```
 
-[1] "Isn't this what makfiles are supposed to replace?" Yes. 
+[1] "Isn't this what makfiles are supposed to replace?" Yes.
 
 [2] This `tfhe_io.c` wrapper is actually *just* for I/O. The TFHE functions to read and write ciphertexts and gate parameters to and from files takes `FILE*` objects, which I can't figure out how to use with `ctpyes`. So `tfhe_io.c` has wrapper functions that take file paths as string literals. If anyone has a real solution to this, please tell me.
 
