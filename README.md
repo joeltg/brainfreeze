@@ -4,10 +4,10 @@
 **[Fully Homomorphic Encryption](https://en.wikipedia.org/wiki/Homomorphic_encryption)** is this hip new thing all the cool crypto kids are talking about.
 It lets you operate on encrypted ciphertexts - so that anyone can compute the encrypted result of some function without ever knowing what the inputs really were (or even what the output really was). 
 
-People are pretty excited about this because it promises some wild applications, like permissionless cloud computing or truly anonymous smart contracts.
+People are pretty excited about this because it promises some wild applications, like truly secure cloud computing or truly anonymous smart contracts.
 
 ### FHC
-**Fully Homomorphic Computing** is something I just made up to describe a fully homomorphic *programming languages*. 
+**Fully Homomorphic Computing** is something I just made up to describe fully homomorphic *programming languages*. 
 This is when the function that we homomorphically evaluate is the `eval` function itself. 
 The input is encrypted code, and the output is the encrypted result of running that code.
 But the computer itself never actually knows what it's executing!
