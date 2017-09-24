@@ -34,15 +34,25 @@ Brainfreeze is a stack of three abstraction layers:
 
 ## API
 
-First, [install TFHE](https://tfhe.github.io/tfhe/installation.html).
+1. [Install TFHE](https://tfhe.github.io/tfhe/installation.html).
 
-Then clone this repo and compile the Python wrapper. [1]
+2. Clone this repo and edit `tfhe.py` and `makefile` to reference the right version of TFHE. [1] The defaults are all for the `libtfhe-spqlios-fma`, which is what you get when you compile TFHE with the `-DENABLE_SPQLIOS_FMA=on` flag.
+
+3. Compile the Python wrapper. [2]
 ```shell
 git clone https://github.com/joeltg/brainfreeze
 cd brainfreeze
 make
 ```
 
-[1] This `tfhe_io.c` wrapper is actually *just* for I/O. The TFHE functions to read and write ciphertexts and gate parameters to and from files takes `FILE*` objects, which I can't figure out how to use with `ctpyes`. So `tfhe_io.c` has wrapper functions that take file descriptors as integers. If anyone has a real solution to this, please tell me.
+4. Profit
+```python
+from brainfreeze import *
+secret_keyset, cloud_keyset = initialize(architecture=8)
+```
+
+[1] "Isn't this what makfiles are supposed to replace?" Yes. 
+
+[2] This `tfhe_io.c` wrapper is actually *just* for I/O. The TFHE functions to read and write ciphertexts and gate parameters to and from files takes `FILE*` objects, which I can't figure out how to use with `ctpyes`. So `tfhe_io.c` has wrapper functions that take file paths as string literals. If anyone has a real solution to this, please tell me.
 
 `<marquee><blink> ~ ~ ~ HeLp I'm TrApPeD iN a HoMoMoRpHiC rEaLiTy ~ ~ ~ </blink></marquee>`
