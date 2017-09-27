@@ -49,7 +49,7 @@ make
 
 4. Profit
 ```python
-from main import *from circuits import *
+from circuits import *
 
 secret = create_secret_keyset(GATE_PARAMS)
 cloud = get_cloud_keyset(secret)
