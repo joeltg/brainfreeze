@@ -487,3 +487,31 @@ def write_to_path(name, bus):
     for i in range(ARCHITECTURE):
         file = dir_path + "/" + name + "/" + str(i)
         tfhe_io.export_ciphertext(file.encode(), bus[i], GATE_PARAMS)
+
+
+def import_code(name):
+    dir_name = dir_path + "/" + name
+    if os.path.exists(dir_name):
+        code = {}
+        for i in os.listdir(dir_name):
+            print(i)
+            bus = create_bus()
+            for j in os.listdir(dir_name + "/" + i):
+                print(j)
+                file = dir_name + "/" + i + "/" + j
+                print(file)
+                tfhe_io.import_ciphertext(file.encode(), bus[int(j)], GATE_PARAMS)
+            code[int(i)] = bus
+        return [code[key] for key in sorted(code)]
+
+
+def export_code(name, code):
+    dir_name = dir_path + "/" + name
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
+    for i in range(len(code)):
+        subdir_name = dir_name + "/" + str(i)
+        os.makedirs(subdir_name)
+        for j in range(ARCHITECTURE):
+            file = subdir_name + "/" + str(j)
+            tfhe_io.export_ciphertext(file.encode(), code[i][j], GATE_PARAMS)

@@ -6,9 +6,9 @@ cloud = get_cloud_keyset(secret)
 TRUE.eval(cloud)
 FALSE.eval(cloud)
 
-rom = compile_code("++[-]", secret)
+code = compile_code("++[-]", secret)
 
-computer = Computer(rom)
+computer = Computer(code)
 computer.init(cloud)
 
 
@@ -24,6 +24,3 @@ def show():
     print([get(i, secret) for i in computer.data])
 
 
-show()
-computer.eval(cloud)
-show()
