@@ -57,9 +57,12 @@ cloud = get_cloud_keyset(secret)
 TRUE.eval(cloud)
 FALSE.eval(cloud)
 
-rom = compile_code("++[-]", secret)
+# Export the encrypted code to a file with `write_to_path(<name>, code)`.
+# Or import one with `code = load_from_path(<name>)`.
+# <name> must be a directory name in the current directory.
+code = compile_code("++[-]", secret)
 
-computer = Computer(rom)
+computer = Computer(code)
 computer.init(cloud)
 
 computer.eval(cloud)
