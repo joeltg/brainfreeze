@@ -1,14 +1,9 @@
 import os
 from ctypes import *
 
-ARCH = 8
-
 dir_path = os.path.dirname(os.path.realpath(__file__))
+tfhe_io_path = dir_path + "/tfhe_io.so"
 
-# This will vary depending on your system.
-tfhe_version = "libtfhe-spqlios-fma.dylib"
-tfhe = cdll.LoadLibrary(tfhe_version)
-tfhe_io = cdll.LoadLibrary(dir_path + "/tfhe_io.so")
 
 Torus32 = c_int32
 
@@ -154,34 +149,44 @@ class TFheGateBootstrappingSecretKeySet(Structure):
                 ("cloud", TFheGateBootstrappingCloudKeySet)]
 
 
-tfhe.new_default_gate_bootstrapping_parameters.argtypes = [c_int]
-tfhe.new_default_gate_bootstrapping_parameters.restype = POINTER(TFheGateBootstrappingParameterSet)
-tfhe.delete_gate_bootstrapping_parameters.argtypes = [POINTER(TFheGateBootstrappingParameterSet)]
-tfhe.delete_gate_bootstrapping_parameters.restype = None
-tfhe.new_random_gate_bootstrapping_secret_keyset.argtypes = [POINTER(TFheGateBootstrappingParameterSet)]
-tfhe.new_random_gate_bootstrapping_secret_keyset.restype = POINTER(TFheGateBootstrappingSecretKeySet)
-tfhe.delete_gate_bootstrapping_secret_keyset.argtypes = [POINTER(TFheGateBootstrappingSecretKeySet)]
-tfhe.delete_gate_bootstrapping_secret_keyset.restype = None
-tfhe.new_gate_bootstrapping_ciphertext.argtypes = [POINTER(TFheGateBootstrappingParameterSet)]
-tfhe.new_gate_bootstrapping_ciphertext.restype = POINTER(LweSample)
-tfhe.new_gate_bootstrapping_ciphertext_array.argtypes = [c_int, POINTER(TFheGateBootstrappingParameterSet)]
-tfhe.new_gate_bootstrapping_ciphertext_array.restype = POINTER(LweSample) * ARCH
-tfhe.delete_gate_bootstrapping_ciphertext.argtypes = [POINTER(LweSample)]
-tfhe.delete_gate_bootstrapping_ciphertext.restype = None
-tfhe.delete_gate_bootstrapping_ciphertext_array.argtypes = [c_int, POINTER(LweSample) * ARCH]
-tfhe.delete_gate_bootstrapping_ciphertext_array.restype = None
-tfhe_io.export_gate_params.argtypes = [c_char_p, POINTER(TFheGateBootstrappingParameterSet)]
-tfhe_io.import_gate_params.argtypes = [c_char_p]
-tfhe_io.export_gate_params.restype = None
-tfhe_io.import_gate_params.restype = POINTER(TFheGateBootstrappingParameterSet)
-tfhe_io.export_secret_keyset.argtypes = [c_char_p, POINTER(TFheGateBootstrappingSecretKeySet)]
-tfhe_io.import_secret_keyset.argtypes = [c_char_p]
-tfhe_io.export_secret_keyset.restype = None
-tfhe_io.import_secret_keyset.restype = POINTER(TFheGateBootstrappingSecretKeySet)
-tfhe_io.export_cloud_keyset.argtypes = [c_char_p, POINTER(TFheGateBootstrappingCloudKeySet)]
-tfhe_io.import_cloud_keyset.argtypes = [c_char_p]
-tfhe_io.export_cloud_keyset.restype = None
-tfhe_io.import_cloud_keyset.restype = POINTER(TFheGateBootstrappingCloudKeySet)
-tfhe_io.export_ciphertext.argtypes = [c_char_p, POINTER(LweSample), POINTER(TFheGateBootstrappingParameterSet)]
-tfhe_io.import_ciphertext.argtypes = [c_char_p, POINTER(LweSample), POINTER(TFheGateBootstrappingParameterSet)]
-tfhe_io.import_ciphertext.restype = None
+def initialize(library, architecture):
+    tfhe = cdll.LoadLibrary(library)
+    tfhe_io = cdll.LoadLibrary(tfhe_io_path)
+
+    tfhe.new_default_gate_bootstrapping_parameters.argtypes = [c_int]
+    tfhe.new_default_gate_bootstrapping_parameters.restype = POINTER(TFheGateBootstrappingParameterSet)
+    tfhe.delete_gate_bootstrapping_parameters.argtypes = [POINTER(TFheGateBootstrappingParameterSet)]
+    tfhe.delete_gate_bootstrapping_parameters.restype = None
+    tfhe.new_random_gate_bootstrapping_secret_keyset.argtypes = [POINTER(TFheGateBootstrappingParameterSet)]
+    tfhe.new_random_gate_bootstrapping_secret_keyset.restype = POINTER(TFheGateBootstrappingSecretKeySet)
+    tfhe.delete_gate_bootstrapping_secret_keyset.argtypes = [POINTER(TFheGateBootstrappingSecretKeySet)]
+    tfhe.delete_gate_bootstrapping_secret_keyset.restype = None
+    tfhe.new_gate_bootstrapping_ciphertext.argtypes = [POINTER(TFheGateBootstrappingParameterSet)]
+    tfhe.new_gate_bootstrapping_ciphertext.restype = POINTER(LweSample)
+    tfhe.delete_gate_bootstrapping_ciphertext.argtypes = [POINTER(LweSample)]
+    tfhe.delete_gate_bootstrapping_ciphertext.restype = None
+
+    # These are array operations that can't be typed unless you know the length ahead of time
+    tfhe.new_gate_bootstrapping_ciphertext_array.argtypes = [c_int, POINTER(TFheGateBootstrappingParameterSet)]
+    tfhe.new_gate_bootstrapping_ciphertext_array.restype = POINTER(LweSample) * architecture
+    tfhe.delete_gate_bootstrapping_ciphertext_array.argtypes = [c_int, POINTER(LweSample) * architecture]
+    tfhe.delete_gate_bootstrapping_ciphertext_array.restype = None
+
+    tfhe_io.export_gate_params.argtypes = [c_char_p, POINTER(TFheGateBootstrappingParameterSet)]
+    tfhe_io.import_gate_params.argtypes = [c_char_p]
+    tfhe_io.export_gate_params.restype = None
+    tfhe_io.import_gate_params.restype = POINTER(TFheGateBootstrappingParameterSet)
+    tfhe_io.export_secret_keyset.argtypes = [c_char_p, POINTER(TFheGateBootstrappingSecretKeySet)]
+    tfhe_io.import_secret_keyset.argtypes = [c_char_p]
+    tfhe_io.export_secret_keyset.restype = None
+    tfhe_io.import_secret_keyset.restype = POINTER(TFheGateBootstrappingSecretKeySet)
+    tfhe_io.export_cloud_keyset.argtypes = [c_char_p, POINTER(TFheGateBootstrappingCloudKeySet)]
+    tfhe_io.import_cloud_keyset.argtypes = [c_char_p]
+    tfhe_io.export_cloud_keyset.restype = None
+    tfhe_io.import_cloud_keyset.restype = POINTER(TFheGateBootstrappingCloudKeySet)
+    tfhe_io.export_ciphertext.argtypes = [c_char_p, POINTER(LweSample), POINTER(TFheGateBootstrappingParameterSet)]
+    tfhe_io.import_ciphertext.argtypes = [c_char_p, POINTER(LweSample), POINTER(TFheGateBootstrappingParameterSet)]
+    tfhe_io.export_ciphertext.restype = None
+    tfhe_io.import_ciphertext.restype = None
+
+    return tfhe, tfhe_io

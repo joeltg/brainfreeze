@@ -1,31 +1,26 @@
 from abc import ABC, abstractmethod
 from tfhe import *
 
-GATE_PARAMS = create_gate_params()
-
-RAM_WIDTH = 8
+RAM_WIDTH = 16
+GATE_PARAMS = create_gate_params(MINIMUM_LAMBDA)
 
 
 def encode(value):
-    modulo = value % 2 ** (ARCH - 1)
-    binary = bin(modulo)[2:].zfill(ARCH - 1)
+    modulo = value % 2 ** (ARCHITECTURE - 1)
+    binary = bin(modulo)[2:].zfill(ARCHITECTURE - 1)
     string = "1" + binary if value < 0 else "0" + binary
     return [bool(int(char)) for char in string]
 
 
 def decode(bits):
     value = int("".join(map(str, map(int, bits[1:]))), 2)
-    return value - 2 ** (ARCH - 1) if bits[0] else value
-
-
-def create_value():
-    return create_ciphertext(GATE_PARAMS)
+    return value - 2 ** (ARCHITECTURE - 1) if bits[0] else value
 
 
 def create_bus():
     bus = []
-    for i in range(ARCH):
-        bus.append(create_value())
+    for i in range(ARCHITECTURE):
+        bus.append(create_ciphertext(GATE_PARAMS))
     return bus
 
 
@@ -47,7 +42,7 @@ class Gate(Circuit):
         Circuit.__init__(self)
         self.inputs = inputs
         self.apply = apply
-        self.value = create_value()
+        self.value = create_ciphertext(GATE_PARAMS)
 
     def eval(self, cloud_key):
         inputs = self.inputs
@@ -161,10 +156,10 @@ class BitAdder(Circuit):
 class BusAdder(Circuit):
     def __init__(self, a, b):
         Circuit.__init__(self)
-        self.value = [None] * ARCH
-        self.adder = [None] * ARCH
+        self.value = [None] * ARCHITECTURE
+        self.adder = [None] * ARCHITECTURE
         carry = FALSE.value
-        for i in reversed(range(ARCH)):
+        for i in reversed(range(ARCHITECTURE)):
             adder = BitAdder(a[i], b[i], carry)
             carry = adder.carry
             self.adder[i] = adder
@@ -181,7 +176,7 @@ class Equal(Circuit):
         Circuit.__init__(self)
         self.gates = []
         value = TRUE.value
-        for i in range(ARCH):
+        for i in range(ARCHITECTURE):
             equal = XNOR(a[i], b[i])
             gate = AND(value, equal.value)
             value = gate.value
@@ -214,7 +209,7 @@ class Switch(Circuit):
     def __init__(self, condition, a, b):
         Circuit.__init__(self)
         self.condition = condition
-        self.muxes = [MUX(condition, a[i], b[i]) for i in range(ARCH)]
+        self.muxes = [MUX(condition, a[i], b[i]) for i in range(ARCHITECTURE)]
         self.value = [mux.value for mux in self.muxes]
 
     def eval(self, cloud_key):
@@ -241,32 +236,51 @@ class Index(Circuit):
             element.eval(cloud_key)
 
 
+class Alive(Circuit):
+    def __init__(self, direction, alive, nest_zero, value_zero, is_open, is_close, loop, bit):
+        Circuit.__init__(self)
+        self.pair = MUX(direction, is_close, is_open)
+
+        self.xor = XOR(bit, value_zero)
+        self.yes = NAND(loop, self.xor.value)
+        self.no = AND(self.pair.value, nest_zero)
+
+        self.switch = MUX(alive, self.yes.value, self.no.value)
+        self.value = self.switch.value
+
+    def eval(self, cloud_key):
+        self.pair.eval(cloud_key)
+        self.xor.eval(cloud_key)
+        self.yes.eval(cloud_key)
+        self.no.eval(cloud_key)
+        self.switch.eval(cloud_key)
+
+
 class Direction(Circuit):
-    def __init__(self, value, direction, nest, is_open, is_close):
+    def __init__(self, direction, alive, nest_zero, value_zero, is_open, is_close):
         Circuit.__init__(self)
 
-        self.nest_zero = Zero(nest)
-        self.value_zero = Zero(value)
-
-        self.right = ORYN(self.value_zero.value, is_close)
-        self.left = AND(is_open, self.nest_zero.value)
+        self.right_alive = ORYN(value_zero, is_close)
+        self.right_dead = AND(nest_zero, is_close)
+        self.right = MUX(alive, self.right_alive.value, self.right_dead.value)
+        self.left = AND(is_open, nest_zero)
         self.switch = MUX(direction, self.right.value, self.left.value)
         self.value = self.switch.value
 
     def eval(self, cloud_key):
-        self.nest_zero.eval(cloud_key)
-        self.value_zero.eval(cloud_key)
+        self.right_alive.eval(cloud_key)
+        self.right_dead.eval(cloud_key)
         self.right.eval(cloud_key)
         self.left.eval(cloud_key)
         self.switch.eval(cloud_key)
 
 
 class Nest(Circuit):
-    def __init__(self, direction, nest, loop, delta):
+    def __init__(self, alive, nest, loop, delta):
         Circuit.__init__(self)
         self.delta = Switch(loop, delta, ZERO)
         self.left = BusAdder(nest, self.delta.value)
-        self.switch = Switch(direction, ZERO, self.left.value)
+        self.switch = Switch(alive, ZERO, self.left.value)
         self.value = self.switch.value
 
     def eval(self, cloud_key):
@@ -283,7 +297,7 @@ class Nest(Circuit):
 
 
 class CPU(Circuit):
-    def __init__(self, instruction, value, direction, nest):
+    def __init__(self, instruction, value, direction, alive, nest):
         Circuit.__init__(self)
         self.loop = AND(instruction[-2], instruction[-3])
         self.open = ANDYN(self.loop.value, instruction[-1])
@@ -291,15 +305,22 @@ class CPU(Circuit):
         self.delta = Switch(instruction[-1], NEGATIVE_ONE, POSITIVE_ONE)
 
         self.move = NOR(instruction[-2], instruction[-3])
-        self.move_alive = AND(direction, self.move.value)
+        self.move_alive = AND(alive, self.move.value)
         self.move_delta = Switch(self.move_alive.value, self.delta.value, ZERO)
 
         self.edit = ANDYN(instruction[-2], instruction[-3])
-        self.edit_alive = AND(direction, self.edit.value)
+        self.edit_alive = AND(alive, self.edit.value)
         self.edit_delta = Switch(self.edit_alive.value, self.delta.value, ZERO)
 
-        self.direction = Direction(value, direction, nest, self.open.value, self.close.value)
-        self.nest = Nest(direction, nest, self.loop.value, self.delta.value)
+        self.nest_zero = Zero(nest)
+        self.value_zero = Zero(value)
+
+        nest_zero = self.nest_zero.value
+        value_zero = self.value_zero.value
+
+        self.direction = Direction(direction, alive, nest_zero, value_zero, self.open.value, self.close.value)
+        self.alive = Alive(direction, alive, nest_zero, value_zero, self.open.value, self.close.value, self.loop.value, instruction[-1])
+        self.nest = Nest(alive, nest, self.loop.value, self.delta.value)
 
     def eval(self, cloud_key):
         self.loop.eval(cloud_key)
@@ -315,7 +336,11 @@ class CPU(Circuit):
         self.edit_alive.eval(cloud_key)
         self.edit_delta.eval(cloud_key)
 
+        self.nest_zero.eval(cloud_key)
+        self.value_zero.eval(cloud_key)
+
         self.direction.eval(cloud_key)
+        self.alive.eval(cloud_key)
         self.nest.eval(cloud_key)
 
 
@@ -347,7 +372,8 @@ class Computer(Circuit):
         self.instruction_pointer = create_bus()
         self.instruction_index = Index(self.instruction_pointer, self.instructions)
         self.instruction = self.instruction_index.value
-        self.direction = create_value()
+        self.direction = create_ciphertext(GATE_PARAMS)
+        self.alive = create_ciphertext(GATE_PARAMS)
         self.nest = create_bus()
 
         self.data = create_ram()
@@ -355,7 +381,7 @@ class Computer(Circuit):
         self.data_index = Index(self.data_pointer, self.data)
         self.value = self.data_index.value
 
-        self.cpu = CPU(self.instruction, self.value, self.direction, self.nest)
+        self.cpu = CPU(self.instruction, self.value, self.direction, self.alive, self.nest)
 
         self.instruction_switch = Switch(self.cpu.direction.value, POSITIVE_ONE, NEGATIVE_ONE)
         self.instruction_adder = BusAdder(self.instruction_switch.value, self.instruction_pointer)
@@ -376,6 +402,7 @@ class Computer(Circuit):
         copy_bus(self.instruction_pointer, self.instruction_adder.value, cloud_key)
         copy_bus(self.data_pointer, self.data_adder.value, cloud_key)
         copy_bit(self.direction, self.cpu.direction.value, cloud_key)
+        copy_bit(self.alive, self.cpu.alive.value, cloud_key)
         copy_bus(self.nest, self.cpu.nest.value, cloud_key)
         for r, v in zip(self.data, self.ram.value):
             copy_bus(r, v, cloud_key)
@@ -391,6 +418,7 @@ class Computer(Circuit):
         for bit in self.data_pointer:
             tfhe.bootsCONSTANT(bit, 0, cloud_key)
         tfhe.bootsCONSTANT(self.direction, 1, cloud_key)
+        tfhe.bootsCONSTANT(self.alive, 1, cloud_key)
 
 
 '''
@@ -416,7 +444,7 @@ operations = {
 }
 
 
-def create_rom(code, secret_key):
+def compile_code(code, secret_key):
     rom = []
     for char in code:
         bits = operations[char]
@@ -447,7 +475,7 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 def load_from_path(name):
     if os.path.exists(dir_path + "/" + name):
         bus = create_bus()
-        for i in range(ARCH):
+        for i in range(ARCHITECTURE):
             file = dir_path + "/" + name + "/" + str(i)
             tfhe_io.import_ciphertext(file.encode(), bus[i], GATE_PARAMS)
         return bus
@@ -456,6 +484,6 @@ def load_from_path(name):
 def write_to_path(name, bus):
     if not os.path.exists(dir_path + "/" + name):
         os.makedirs(dir_path + "/" + name)
-    for i in range(ARCH):
+    for i in range(ARCHITECTURE):
         file = dir_path + "/" + name + "/" + str(i)
         tfhe_io.export_ciphertext(file.encode(), bus[i], GATE_PARAMS)

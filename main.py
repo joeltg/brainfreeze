@@ -6,7 +6,7 @@ cloud = get_cloud_keyset(secret)
 TRUE.eval(cloud)
 FALSE.eval(cloud)
 
-rom = create_rom(">-<++[-]", secret)
+rom = compile_code("++[-]", secret)
 
 computer = Computer(rom)
 computer.init(cloud)
@@ -19,11 +19,11 @@ def show():
     print("dp", get(computer.data_pointer, secret))
     print("d", get(computer.value, secret))
     print("direction", decrypt(computer.direction, secret))
+    print("alive", decrypt(computer.alive, secret))
     print("nest", get(computer.nest, secret))
     print([get(i, secret) for i in computer.data])
 
 
-for i in range(12):
-    show()
-    computer.eval(cloud)
+show()
+computer.eval(cloud)
 show()
