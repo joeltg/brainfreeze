@@ -65,7 +65,7 @@ computer.init(cloud)
 computer.eval(cloud)
 ```
 
-You can also read and write ciphertextst to files with `import_ciphertext` and `export_ciphertext`.
+You can also read/write encrypted programs to/from files with `import_ciphertext` and `export_ciphertext`.
 
 [1] "Isn't this what makfiles are supposed to replace?" Yes.
 
