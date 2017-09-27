@@ -32,7 +32,7 @@ Brainfreeze is a stack of three abstraction layers:
 
 1. A Python wrapper for the TFHE library. This is `tfhe.py` and `tfhe_utils.py`. They're written using `ctypes` and is probably the most useful part of this whole rigmarole.
 2. A collection of homomorphic circuits (adders, muxes, RAM, CPU) built from TFHE gates. They inherit from the `Circuit` class in `circuits.py`. The CPU design is inspired by [this one](https://github.com/briandef/bf16).
-3. A minimal Brainfuck computer. The interface in `brainfreeze.py` exposes `compile`, `evaluate`, and `decompile` functions to interact with it concisely.
+3. A minimal Brainfuck computer. See it in action in `main.py`.
 
 ## API
 
@@ -49,9 +49,23 @@ make
 
 4. Profit
 ```python
-from brainfreeze import *
-secret_keyset, cloud_keyset = initialize(architecture=8)
+from main import *from circuits import *
+
+secret = create_secret_keyset(GATE_PARAMS)
+cloud = get_cloud_keyset(secret)
+
+TRUE.eval(cloud)
+FALSE.eval(cloud)
+
+rom = compile_code("++[-]", secret)
+
+computer = Computer(rom)
+computer.init(cloud)
+
+computer.eval(cloud)
 ```
+
+You can also read and write ciphertextst to files with `import_ciphertext` and `export_ciphertext`.
 
 [1] "Isn't this what makfiles are supposed to replace?" Yes.
 
